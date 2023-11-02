@@ -1098,6 +1098,189 @@ def gen_tetramers_dist_cache(shells,dist_cut,mlist,coord,cell,file_out):
          sid3=get_vec_dir(int(tetr[3]),mlist)
          f.write(sid0+sid1+sid2+sid3+' '+' '.join(map(str,tetr[4:8]))+'\n')
 
+################################################################################
+#   gen_tetramers_dist_cache_cell(shells,dist_cut,mlist,coord,cell,file_out)   #
+################################################################################
+#
+# Generate the list of tetramers using a distance criterion
+# an ordered list of monomers needs to be put to the routine
+# a nested loop over the monomers is performed 0<id1<id2<id3
+# tetramers are found, stored in a list, and finally ordered 
+# according to distance and written to the file
+#
+# compared to gen_tetramers() the dimer distances are precalculated
+# here
+############################################################
+#
+# #nmono_max: number of monomers to read from the monomer list mlist
+# shells:    number of shells to consider
+# dist_cut:  distance criterion in Angstrom
+# mlist:     monomer list as from gen_list()
+# coord:     monomer coordinates in the unit cell
+# cell:      unit cell
+# file_out:  output file to write the list to
+############################################################
+def gen_tetramers_dist_cache_cell(shells,dist_cut,mlist,coord,cell,file_out):
+   #number of monomers in the unit cell
+   cell_mono=coord.shape[0]
+   #number of shells that we are using
+   #the largest index of the distance array will have to be then 2*shells+1
+   #shells=mlist[nmono_max,1] 
+   nmono_max=-1
+   if mlist[-1,1]==shells:
+      #if the last monomer is from the largest shell, then use all monomers
+      nmono_max=mlist.shape[0]-1
+   elif mlist[-1,1]<shells:
+      print ('Error, monomer list not sufficient, rerun mbe.gen_list with a larger number of shells')
+      exit()
+   else:
+      #find the largest monomer index from the shell
+      #loop over all the monomers 
+      for idx in range(mlist.shape[0]):
+         #we find a monomer from a larger shell
+         if mlist[idx,1]>shells:
+            nmono_max=idx-1
+            break
+      if nmono_max==-1:
+         print ('Can not identify monomer from your shell')
+
+   #dist_ar is the array which stores all the distances
+   dist_ar=np.zeros((cell_mono,cell_mono,2*shells+1,4*shells+1,4*shells+1)) 
+   #finished here
+   shift_base=[0,0,0]
+   dist_min=100000
+   #index the first monomer
+   for m1 in range(cell_mono):
+      #first monomer coordinates in the unit cell
+      cm1=coord[m1,:,:].copy()
+      for m2 in range(cell_mono):
+         #second monomer coordinates in the unit cell
+         cm2=coord[m2,:,:].copy()
+         #difference between the x shift of the monomers, 
+         #the largest difference between X shifts for a given number of shells
+         #is 2*shells, from -shells to shells
+         #the smallest one can be set to zero as we can choose the monomer
+         for xsh in range(2*shells+1):
+            #for y and z we can't shuffle the monomers, so the difference between cells
+            #is from -2*shells to 2*shells, in total 4*shells
+            #in the range ysh=2*shells corresponds to the zero difference between the cells
+            for ysh in range(4*shells+1):
+               for zsh in range(4*shells+1):
+                  shift_m2=[xsh,ysh-2*shells,zsh-2*shells]
+                  #dist_ar[m1,m2,xsh,ysh,zsh]=get_distance_from_vec(cm1,shift_base,cm2,shift_m2,cell)
+                  dist_act=get_distance_from_vec(cm1,shift_base,cm2,shift_m2,cell)
+                  dist_ar[m1,m2,xsh,ysh,zsh]=dist_act
+                  #keep track of the shortest distance between dimers
+                  if dist_act<dist_min:
+                     dist_min=dist_act
+
+   id0=0
+   list_tot=[]
+   #with open(file_out,'w+') as f:
+   for id1 in range(1,nmono_max):
+      print('working on '+str(id1)+' out of '+str(nmono_max))
+      #dist01=get_distance_from_idx(id0,id1,mlist,coord,cell)
+      #get xyz and monomer information
+      dat1=mlist[id1,2:6]
+      #if the xshift is 0 or larger, use the shift directly
+      #need to shift the y and z index to larger values
+      if dat1[0]>=0:
+         dist01=dist_ar[0,dat1[3],dat1[0],dat1[1]+2*shells,dat1[2]+2*shells]
+      else: 
+         #if the xshift is negative, swap the monomers and shift
+         dist01=dist_ar[dat1[3],0,-dat1[0],-dat1[1]+2*shells,-dat1[2]+2*shells]
+      if dist01>dist_cut-5*dist_min:
+         continue
+      for id2 in range(id1+1,nmono_max):
+         #dist02=get_distance_from_idx(id0,id2,mlist,coord,cell)
+         dat2=mlist[id2,2:6]
+         #if the xshift is 0 or larger, use the shift directly
+         if dat2[0]>=0:
+            dist02=dist_ar[0,dat2[3],dat2[0],dat2[1]+2*shells,dat2[2]+2*shells]
+         else: 
+            #if the xshift is negative, swap the monomers and shift
+            dist02=dist_ar[dat2[3],0,-dat2[0],-dat2[1]+2*shells,-dat2[2]+2*shells]
+         #dist12=get_distance_from_idx(id1,id2,mlist,coord,cell)
+         #if the xshift is same or larger than that of monomer1, use the shift directly
+         if dat2[0]>=dat1[0]:
+            dist12=dist_ar[dat1[3],dat2[3],dat2[0]-dat1[0],dat2[1]-dat1[1]+2*shells,dat2[2]-dat1[2]+2*shells]
+         else: 
+            #if the xshift is negative, swap the monomers and shift
+            dist12=dist_ar[dat2[3],dat1[3],dat1[0]-dat2[0],dat1[1]-dat2[1]+2*shells,dat1[2]-dat2[2]+2*shells]
+         if dist01+dist02+dist12>dist_cut-3*dist_min:
+            continue
+         #make a loop over the last monomer of the tetramer
+         #tetramers to be added
+         list_tmp=[]
+         trim_out=False
+         #this is the array storing information about previous tested monomer
+         dat3_tmp=[-100,-100,-100,-100]
+         for id3 in range(id2+1,nmono_max):
+            #get the information about current monomer
+            dat3=mlist[id3,2:6]
+
+            #check if we have moved to a new cell
+            if (dat3[0]!=dat3_tmp[0]) or (dat3[1]!=dat3_tmp[1]) or (dat3[2]!=dat3_tmp[2]):
+               #check if some of the previous tetramers is below cut-off
+               if trim_out==True:
+                  print(len(list_tmp),' tetramers added')
+                  #add the tetramers to the global list
+                  for elem in list_tmp:
+                     list_tot.append(elem)
+               #start making a new list for this cell
+               list_tmp=[]
+               trim_out=False
+               dat3_tmp=dat3
+
+            #dist03=get_distance_from_idx(id0,id3,mlist,coord,cell)
+            #if the xshift is 0 or larger, use the shift directly
+            if dat3[0]>=0:
+               dist03=dist_ar[0,dat3[3],dat3[0],dat3[1]+2*shells,dat3[2]+2*shells]
+            else: 
+               #if the xshift is negative, swap the monomers and shift
+               dist03=dist_ar[dat3[3],0,-dat3[0],-dat3[1]+2*shells,-dat3[2]+2*shells]
+            #dist13=get_distance_from_idx(id1,id3,mlist,coord,cell)
+            if dat3[0]>=dat1[0]:
+               dist13=dist_ar[dat1[3],dat3[3],dat3[0]-dat1[0],dat3[1]-dat1[1]+2*shells,dat3[2]-dat1[2]+2*shells]
+            else: 
+               #if the xshift is negative, swap the monomers and shift
+               dist13=dist_ar[dat3[3],dat1[3],dat1[0]-dat3[0],dat1[1]-dat3[1]+2*shells,dat1[2]-dat3[2]+2*shells]
+
+            #dist23=get_distance_from_idx(id2,id3,mlist,coord,cell)
+            if dat3[0]>=dat2[0]:
+               dist23=dist_ar[dat2[3],dat3[3],dat3[0]-dat2[0],dat3[1]-dat2[1]+2*shells,dat3[2]-dat2[2]+2*shells]
+            else: 
+               #if the xshift is negative, swap the monomers and shift
+               dist23=dist_ar[dat3[3],dat2[3],dat2[0]-dat3[0],dat2[1]-dat3[1]+2*shells,dat2[2]-dat3[2]+2*shells]
+
+            tot_dist=dist01+dist02+dist12+dist03+dist13+dist23
+            list_tmp.append([id0,id1,id2,id3,dist01,dist02,dist03,tot_dist])
+            if tot_dist<=dist_cut:
+               trim_out=True
+               #print(tot_dist,get_vec(id1,mlist),get_vec(id2,mlist))
+               #print (str(id0)+' '+str(id1)+' '+str(id2)+' '+str(id3))
+               #f.write(get_vec_dir(id0,mlist)+get_vec_dir(id1,mlist)+get_vec_dir(id2,mlist)+get_vec_dir(id3,mlist)+' '+str(dist01)+' '+str(dist02)+' '+str(dist03)+' '+str(tot_dist)+'\n')
+               #list_tot.append([id0,id1,id2,id3,dist01,dist02,dist03,tot_dist])
+
+   with open(file_out,'w+') as f:
+      for tetr in list_tot:
+         sid0=get_vec_dir(int(tetr[0]),mlist)
+         sid1=get_vec_dir(int(tetr[1]),mlist)
+         sid2=get_vec_dir(int(tetr[2]),mlist)
+         sid3=get_vec_dir(int(tetr[3]),mlist)
+         f.write(sid0+sid1+sid2+sid3+' '+' '.join(map(str,tetr[4:8]))+'\n')
+
+
+   list_tot.sort(key=lambda x: x[7])
+   #print(list_tot) 
+   with open('sort_'+file_out,'w+') as f:
+      for tetr in list_tot:
+         sid0=get_vec_dir(int(tetr[0]),mlist)
+         sid1=get_vec_dir(int(tetr[1]),mlist)
+         sid2=get_vec_dir(int(tetr[2]),mlist)
+         sid3=get_vec_dir(int(tetr[3]),mlist)
+         f.write(sid0+sid1+sid2+sid3+' '+' '.join(map(str,tetr[4:8]))+'\n')
+
 #################################################
 #   get_chematrix(mer,mlist,coord,elems,cell)   #
 #################################################
@@ -1180,6 +1363,31 @@ def get_chematrix(mer,mlist,coord,elems,cell):
 # find symmetry equivalent nmers in a distance ordered list of nmers 
 # the nmers are read from file created by gen_mers
 #
+# To do box summation in the future we need to produce the original list
+# with symmetry equivalent mers groupped together. As this was a bug.
+# Imagine we have several mers with the same distance, say there are 
+# two equivalent groups, but they are not ordered, the third can belong
+# to the first or second group, same for each of the next one.
+# We print each inequivalent mer with the number of symmetry equivalent
+# mers and when expanding the symmetry we take the mer directories 
+# from the original list of mers (without symmetry applied). 
+# This means that we could assign wrong mers to the groups and, moreover,
+# we could use wrong name for some mer.
+# Example:
+# mer1 inequiv, group1
+# mer2 inequiv, group2
+# mer3 equiv, group1
+# sift_nmer_list() =>
+# mer1 multip 2  energy1
+# mer2 multip 1  energy2
+# expand sym =>
+# mer1 energy1
+# mer2 energy1
+# mer3 energy2
+# so that the energy assigned to mer3 is not energy1 but energy2
+# also I see that the mer directory actually appears twice in these cases, 
+# not clear why yet but also wrong
+#
 #######################################################
 #
 # listfile file listing the nmers
@@ -1209,9 +1417,13 @@ def sift_nmer_list(listfile,mlist,coord,elems,cell,epsilon=1.e-6):
    neq_list=[]
    #keep the complete line for the nonequivalent so that they are easy to print
    line_list=[]
+   #complete line of equivalent to be able to print the nosym list of mers 
+   #in correct order (with groups of equivalent together)
+   all_list=[]
    #we start with meaningless distance
    dist_cur=-1
    
+   shuf=open('shuffle_'+listfile,'w+')
    with open('sym_'+listfile,'w+') as outf:
       for line in flin:  
          fspl=line.split()
@@ -1223,8 +1435,10 @@ def sift_nmer_list(listfile,mlist,coord,elems,cell,epsilon=1.e-6):
          for i in range(len(dirs)):
             idxs.append(get_idx_str(mlist,dirs[i]))
          if len(dirs) == 2:
+            #for dimer the distance is on second place
             dist=float(fspl[1])
          else:
+            #for trimer and tetramer distance is printed on the fifth place
             #get distance of the nmer
             dist=float(fspl[4])
          
@@ -1239,11 +1453,15 @@ def sift_nmer_list(listfile,mlist,coord,elems,cell,epsilon=1.e-6):
                print ('Found '+str(neq_list[inmer])+' equivalent mers for '+str(inequiv[inmer]))
                #write the inequivalent nmer to a file with the multiplicity included
                outf.write(line_list[inmer]+' '+str(neq_list[inmer])+'\n')
-               #exit()
+               #write the equivalent nmers to new sort_* file
+               #neq_list[inmer] gives the number of equivalent nmers for inequivalent mer inmer
+               for ieq in range(neq_list[inmer]):
+                  shuf.write(all_list[inmer][ieq]+'\n')
             inequiv=[]
             eig_list=[]
             neq_list=[]
             line_list=[]
+            all_list=[]
             #add the current mer as the first element
             inequiv.append(idxs)
             #we have now one equivalent mer for the new mer
@@ -1252,6 +1470,15 @@ def sift_nmer_list(listfile,mlist,coord,elems,cell,epsilon=1.e-6):
             eigvals=get_chematrix(idxs,mlist,coord,elems,cell)
             eig_list.append(eigvals)
             line_list.append(line.strip())
+            #we want to keep collecting all the lines to be able to print them in the end
+            #we create a list for first monomer and use it as a first element of the list
+            #if the subsequent line will be equivalent it will be appended to the first 
+            #list element, if it will be inequivalent a new list in the main list will be
+            #created
+            #that might be valid?
+            tmp_list=[line.strip()]
+            all_list.append(tmp_list)
+            #print('New mer ', str(idxs))
             #print('mer')
             #print(inequiv)
             #print(eig_list)
@@ -1273,10 +1500,12 @@ def sift_nmer_list(listfile,mlist,coord,elems,cell,epsilon=1.e-6):
                #print(tot)
                if tot < epsilon:
                   #we have a mer equivalent to inmer
-                  #print(str(idx)+' found equivalent to '+str(inequiv[inmer]))
+                  #print(str(idxs)+' found equivalent to '+str(inequiv[inmer]))
                   new=0
                   equiv=inmer
                   neq_list[inmer]+=1
+                  #add the current line to the appropriate all_list element
+                  all_list[inmer].append(line.strip())
             #we have really a new inequivalent mer
             #store its eigenvalues and indices
             if new==1:
@@ -1285,6 +1514,19 @@ def sift_nmer_list(listfile,mlist,coord,elems,cell,epsilon=1.e-6):
                eig_list.append(eigvals)
                neq_list.append(1)
                line_list.append(line.strip())
+               #add the line to the all_list as a new list element
+               tmp_list=[line.strip()]
+               all_list.append(tmp_list)
+      #we are at the end of the file, we need to print the stuff from the memory
+      for inmer in range(len(inequiv)):
+         #print ('Found '+str(neq_list[inmer])+' equivalent mers for '+str(inequiv[inmer]))
+         #write the inequivalent nmer to a file with the multiplicity included
+         outf.write(line_list[inmer]+' '+str(neq_list[inmer])+'\n')
+         #write the equivalent nmers to new sort_* file
+         for ieq in range(neq_list[inmer]):
+            shuf.write(all_list[inmer][ieq]+'\n')
+         #exit()
+      
  
    
 ####################################################################################
@@ -1311,6 +1553,8 @@ def expand_sym_nmer_list(list_file, enlist_file, out_enlist_file):
    # open the list file with energies of SYMs including the symmetry factors and read its contents
    with open(enlist_file,'r') as f:
       sflin=f.readlines()
+   #TODO check, taken from other mbe.py file
+   print(sflin[-1])
 
    # guess the number of mers
    test=sflin[0].split('/')
@@ -1330,9 +1574,11 @@ def expand_sym_nmer_list(list_file, enlist_file, out_enlist_file):
      facpos=3
    elif nmer==3:
      facpos=6
+   elif nmer==4:
+     facpos=6
    else:
-     print('need to fill in the position of the symmetry factor on line 1119 :) ')
-     #crash
+     print('need to fill in the position of the symmetry factor in expand_sym_nmer_list ')
+     exit()
 
    # index into the non-sym list
    idx=0
@@ -1343,6 +1589,7 @@ def expand_sym_nmer_list(list_file, enlist_file, out_enlist_file):
    for line in sflin:
       #get the symmetry factor
       symac=line.split()[facpos]
+      print(line.split()[0]+' '+symac)
       #no symmetry companion for this -mer, be quick
       if symac=='1':
          #copy the line to output
@@ -1393,6 +1640,7 @@ def nmer_box_reorder(enin_file, enout_file, dist_pos):
    with open(enin_file,'r') as f:
       flin=f.readlines()
 
+   #this is the reordered list
    new_list=[]
    f=open(enout_file,'w')
    while len(flin)!= 0:
