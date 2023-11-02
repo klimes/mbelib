@@ -1502,6 +1502,76 @@ def nmer_box_reorder_general(enin_file, enout_file, dist_pos):
       for ind in reversed(idx_list):
          del flin[ind]
 
+
+#####################################################################
+#   filter_NN_nmer_list(listfile,dist_lim)   #
+#####################################################################
+#
+# read the list of nmers and divide it into lists according to number
+# of nearest neighbours (NN)
+# NN is defined by distance which is compared to distances written 
+# in the list file
+#
+#######################################################
+#
+# listfile file listing the nmers
+# dist     distance to define nearest neighbours
+#######################################################
+def filter_NN_nmer_list(listfile,dist_lim):
+   #open the list file and read all the mers in it
+   with open(listfile,'r') as f:
+      flin=f.readlines()
+  
+   #get the number of distances from the list file
+   #the list file contains
+   #fragment distances tot_dist symmetry_fac_(optional)
+   # guess the fragment size "nfrag"
+   # and set the number of groups "ngroup" based on contact-distance
+   # the guess is made based on the index of column that contains the data
+   nparts=len(flin[0].split(' '))
+   if nparts==3 or nparts==2:
+     nfrag=2
+     ngroup=2
+   elif nparts==5 or nparts==6:
+     nfrag=3
+     ngroup=4
+   elif nparts==8 or nparts==9:
+     nfrag=4
+     ngroup=7
+   else: 
+     print ('filter_NN_nmer_list: can not figure out number of mers')
+     print(flin[0])
+     print(nparts)
+   #check that distance is correct for the first line
+   #tot_dist=flin[0].split(' ')[nfrag]
+   #TODO get the distances to floats, sum them and compare to tot_dist
+
+   #loop over listfile's lines stored in flin and write them to 
+   #the correct file
+
+   #open the files for each NN group
+   fs=[]
+   for i in range(ngroup):
+     filename='NC'+str(i)+'_'+str(dist_lim)+'_'+listfile
+     outf=open(filename,'w+')
+     fs.append(outf)
+
+   for line in flin:
+     #get the distances in fragment
+     dists=line.split(' ')[1:ngroup]
+     #check how many distances are below cut-off
+     nNN=0
+     for dist in dists:
+       if float(dist)<dist_lim:
+         nNN+=1
+     if nNN>ngroup:
+       print('error in filter_NN_nmer_list, too many NNs',dists)
+     #write the line to correct file
+     fs[nNN].write(line)
+    
+   for i in range(ngroup):
+     fs[i].close()
+
 ##################################
 ##################################
 #                                #
@@ -2041,7 +2111,18 @@ def read_HF_MP2_Molpro_F12new(filelist,df=False):
    
    return HF, CABS, MP2, MPF12
 
-def read_CC_F12_Molpro(filelist):
+###########################################
+#   read_CC_F12_Molpro(filelist)   #
+###########################################
+#
+# function to grep the energies from the file (stored as a list or whatever)
+#
+###########################################
+#
+# filelist: a list with lines of the file
+# n: number of mers
+###########################################
+def read_CC_F12_Molpro(filelist,return_list=False):
    HF=[]
    CABS=[]
    MP2=[]
@@ -2058,7 +2139,7 @@ def read_CC_F12_Molpro(filelist):
    countMP2=-1
    countMF12=-1
    for line in filelist:
-      if "!RHF STATE  1.1 Ene" in line:
+      if "!RHF STATE  1.1 Ene" in line or "!RHF STATE 1.1 Ene" in line:
          #print line,
          tmp=line.split()
          HF.append(tmp[4])
@@ -2087,16 +2168,23 @@ def read_CC_F12_Molpro(filelist):
          CC.append(tmp[3])
  
       #get CCSD correlation energy
-      if "CCSD-F12b correlation energy" in line:
+      if "CCSD-F12b correlation energy" in line or "CCSD-F12c correlation energy" in line:
          #print line,
          tmp=line.split()
          CCF12b.append(tmp[3])
  
       #get scaled triples energy
-      if "Triples (T) contribution (scaled)" in line:
-         #print line,
-         tmp=line.split()
-         Ts.append(tmp[4])
+      #TODO check correctness that (scaled) is not necessary in string
+      if "Triples (T) contribution" in line:
+         if "scaled" in line:
+            #print line,
+            tmp=line.split()
+            Ts.append(tmp[4])
+         else:
+            #print line,
+            tmp=line.split()
+            Ts.append(tmp[3])
+
  
       #get scaling factor for triples
       if "Scale factor for triples energy" in line:
@@ -2127,10 +2215,15 @@ def read_CC_F12_Molpro(filelist):
  
    #take only every other line for CABS 
    CABS=CABS[1::2]
-   Ts=Ts[1::2]
+   if (len(Ts)==2*len(fac)):
+      Ts=Ts[1::2]
    for i in range(len(fac)):
        Tu.append(str(float(Ts[i])/float(fac[i])))
-   return HF, CABS, MP2, MF12, CC, CCF12b, Ts, Tu, F12a, F12b
+   if return_list==True:
+      return [HF, CABS, MP2, MF12, CC, CCF12b, Ts, Tu, F12a, F12b]
+   else:
+      return HF, CABS, MP2, MF12, CC, CCF12b, Ts, Tu, F12a, F12b
+
 
 
 ##########################################
@@ -2198,6 +2291,96 @@ def get_nbody_all(HF, CABS, MP2, MPF12, n):
       print ('Number of mers not implemented')
       return False, -1, -1, -1, -1
 
+##########################################
+#   get_nbody_all_new(energies,n)   #
+##########################################
+#
+# function to calculate the n-body interactions
+###########################################
+#
+# energies: list of lists with the energies of mers from a single run
+# n: number of mers 
+# 
+#####
+# returns list of energies and true if correctly calculated
+###########################################
+def get_nbody_all_new(energies, n):
+
+   if n==5:
+      #check that the length is 15 for 4 body interactions
+      #if len(HF)==31 and len(CABS)==31 and len(MP2)==31 and len(MPF12)==31:
+      correct=True
+      for Emet in energies:
+         if len(Emet)!=31:
+            correct=False
+      if correct==True:
+         Eall=[]
+         for Emet in energies:
+            Emetval=get_5body_54312(Emet)
+            Eall.append(Emetval[0])
+            #HFval=get_5body_54312(HF)
+            #CABSval=get_5body_54312(CABS)
+            #MP2val=get_5body_54312(MP2)
+            #MPF12val=get_5body_54312(MPF12)
+         return True, Eall # , CABSval[0], MPF12val[0],  HFval[0], MP2val[0]
+      else:
+         print ('Not all required energies found, check also molpro version!')
+         return False, []
+   if n==4:
+      correct=True
+      #check first that the number of energies is correct for all the terms
+      for Emet in energies:
+         if len(Emet)!=15:
+            correct=False
+      #if we have all the data, get the non-additive energy
+      if correct==True:
+         Eall=[]
+         for Emet in energies:
+            Emetval=get_4body_4312(Emet)
+            Eall.append(Emetval[0])
+         return True, Eall 
+      else:
+         print ('Not all required energies found, check also molpro version!')
+         return False, []
+   if n==3:
+      correct=True
+      #check first that the number of energies is correct for all the terms
+      for Emet in energies:
+         if len(Emet)!=7:
+            correct=False
+      #if we have all the data, get the non-additive energy
+      if correct==True:
+         Eall=[]
+         for Emet in energies:
+            Emetval=get_3body(Emet)
+            Eall.append(Emetval[0])
+         return True, Eall 
+      else:
+         print ('Not all required energies found, check also molpro version!')
+         return False, []
+   if n==2:
+      correct=True
+      #check first that the number of energies is correct for all the terms
+      #print('energies')
+      #print(energies)
+      for Emet in energies:
+         if len(Emet)!=3:
+            correct=False
+      #if we have all the data, get the non-additive energy
+      if correct==True:
+         Eall=[]
+         for Emet in energies:
+            Emetval=get_2body(Emet)
+            Eall.append(Emetval)
+         return True, Eall 
+      else:
+         print ('Not all required energies found, check also molpro version!')
+         return False, []
+
+   else:
+      #uff, that looks illegal, 
+      print ('Number of mers not implemented')
+      return False, []
 
 ###########################################
 #   get_tetra_HF_MP2_Molpro(filelist,n)   #
