@@ -1437,10 +1437,16 @@ def sift_nmer_list(listfile,mlist,coord,elems,cell,epsilon=1.e-6):
          if len(dirs) == 2:
             #for dimer the distance is on second place
             dist=float(fspl[1])
-         else:
-            #for trimer and tetramer distance is printed on the fifth place
+         elif len(dirs) == 3:
+            #for trimer distance is printed on the fifth place
             #get distance of the nmer
             dist=float(fspl[4])
+         elif len(dirs) == 4:
+            #for tetramer distance is printed on the eigth place
+            #get distance of the nmer
+            dist=float(fspl[7])
+         else:
+            print('mbelib confused in sift_nmer_list ')
          
          #check if the distance has changed from previous significantly
          if abs(dist-dist_cur) > epsilon:
@@ -1575,7 +1581,7 @@ def expand_sym_nmer_list(list_file, enlist_file, out_enlist_file):
    elif nmer==3:
      facpos=6
    elif nmer==4:
-     facpos=6
+     facpos=9
    else:
      print('need to fill in the position of the symmetry factor in expand_sym_nmer_list ')
      exit()
@@ -1723,6 +1729,7 @@ def nmer_box_reorder_general(enin_file, enout_file, dist_pos):
       for i in range(nmers):
          len1+=len(part[i])
       #for dimer we need to subtract 5, not sure
+      #TODO: probably needs to be changed when tetramer list changed
       len1-=5
       query=flin[0][0:len1]
       #list of indices to the list of energies
