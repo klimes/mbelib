@@ -1254,7 +1254,7 @@ def gen_tetramers_dist_cache_cell(shells,dist_cut,mlist,coord,cell,file_out):
                dist23=dist_ar[dat3[3],dat2[3],dat2[0]-dat3[0],dat2[1]-dat3[1]+2*shells,dat2[2]-dat3[2]+2*shells]
 
             tot_dist=dist01+dist02+dist12+dist03+dist13+dist23
-            list_tmp.append([id0,id1,id2,id3,dist01,dist02,dist03,tot_dist])
+            list_tmp.append([id0,id1,id2,id3,dist01,dist02,dist03,dist12,dist13,dist23,tot_dist])
             if tot_dist<=dist_cut:
                trim_out=True
                #print(tot_dist,get_vec(id1,mlist),get_vec(id2,mlist))
@@ -1268,10 +1268,10 @@ def gen_tetramers_dist_cache_cell(shells,dist_cut,mlist,coord,cell,file_out):
          sid1=get_vec_dir(int(tetr[1]),mlist)
          sid2=get_vec_dir(int(tetr[2]),mlist)
          sid3=get_vec_dir(int(tetr[3]),mlist)
-         f.write(sid0+sid1+sid2+sid3+' '+' '.join(map(str,tetr[4:8]))+'\n')
+         f.write(sid0+sid1+sid2+sid3+' '+' '.join(map(str,tetr[4:11]))+'\n')
 
 
-   list_tot.sort(key=lambda x: x[7])
+   list_tot.sort(key=lambda x: x[10])
    #print(list_tot) 
    with open('sort_'+file_out,'w+') as f:
       for tetr in list_tot:
@@ -1279,7 +1279,7 @@ def gen_tetramers_dist_cache_cell(shells,dist_cut,mlist,coord,cell,file_out):
          sid1=get_vec_dir(int(tetr[1]),mlist)
          sid2=get_vec_dir(int(tetr[2]),mlist)
          sid3=get_vec_dir(int(tetr[3]),mlist)
-         f.write(sid0+sid1+sid2+sid3+' '+' '.join(map(str,tetr[4:8]))+'\n')
+         f.write(sid0+sid1+sid2+sid3+' '+' '.join(map(str,tetr[4:11]))+'\n')
 
 #################################################
 #   get_chematrix(mer,mlist,coord,elems,cell)   #
