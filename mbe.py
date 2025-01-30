@@ -2377,7 +2377,7 @@ def read_HF_MP2_Molpro_F12new(filelist,df=False):
 # filelist: a list with lines of the file
 # n: number of mers
 ###########################################
-def read_CC_F12_Molpro(filelist,return_list=False):
+def read_CC_F12_Molpro(filelist, return_list=False, only_MP2=False):
    HF=[]
    CABS=[]
    MP2=[]
@@ -2416,52 +2416,53 @@ def read_CC_F12_Molpro(filelist,return_list=False):
          tmp=line.split()
          MF12.append(tmp[3])
  
-      #get CCSD correlation energy
-      if "CCSD correlation energy" in line:
-         #print line,
-         tmp=line.split()
-         CC.append(tmp[3])
- 
-      #get CCSD correlation energy
-      if "CCSD-F12b correlation energy" in line or "CCSD-F12c correlation energy" in line:
-         #print line,
-         tmp=line.split()
-         CCF12b.append(tmp[3])
- 
-      #get scaled triples energy
-      #TODO check correctness that (scaled) is not necessary in string
-      if "Triples (T) contribution" in line:
-         if "scaled" in line:
+      if only_MP2!=True:
+         #get CCSD correlation energy
+         if "CCSD correlation energy" in line:
             #print line,
             tmp=line.split()
-            Ts.append(tmp[4])
-         else:
+            CC.append(tmp[3])
+    
+         #get CCSD correlation energy
+         if "CCSD-F12b correlation energy" in line or "CCSD-F12c correlation energy" in line:
             #print line,
             tmp=line.split()
-            Ts.append(tmp[3])
-
- 
-      #get scaling factor for triples
-      if "Scale factor for triples energy" in line:
-         #print line,
-         tmp=line.split()
-         fac.append(tmp[5])
-
-      #get CCSD(T)-F12a correlation energies
-      if "F12a corrections for ansatz F12/3C(FIX) added to CCSD energy" in line:
-         count=7
-      if count==0:
-         #print line,
-         tmp=line.split()
-         F12a.append(tmp[3])
-
-      #get CCSD(T)-F12b correlation energies
-      if "F12b corrections for ansatz F12/3C(FIX) added to CCSD(T)-F12a energy" in line:
-         count2=7
-      if count2==0:
-         #print line,
-         tmp=line.split()
-         F12b.append(tmp[3])
+            CCF12b.append(tmp[3])
+    
+         #get scaled triples energy
+         #TODO check correctness that (scaled) is not necessary in string
+         if "Triples (T) contribution" in line:
+            if "scaled" in line:
+               #print line,
+               tmp=line.split()
+               Ts.append(tmp[4])
+            else:
+               #print line,
+               tmp=line.split()
+               Ts.append(tmp[3])
+   
+    
+         #get scaling factor for triples
+         if "Scale factor for triples energy" in line:
+            #print line,
+            tmp=line.split()
+            fac.append(tmp[5])
+   
+         #get CCSD(T)-F12a correlation energies
+         if "F12a corrections for ansatz F12/3C(FIX) added to CCSD energy" in line:
+            count=7
+         if count==0:
+            #print line,
+            tmp=line.split()
+            F12a.append(tmp[3])
+   
+         #get CCSD(T)-F12b correlation energies
+         if "F12b corrections for ansatz F12/3C(FIX) added to CCSD(T)-F12a energy" in line:
+            count2=7
+         if count2==0:
+            #print line,
+            tmp=line.split()
+            F12b.append(tmp[3])
 
       count-=1
       count2-=1
@@ -2470,14 +2471,243 @@ def read_CC_F12_Molpro(filelist,return_list=False):
  
    #take only every other line for CABS 
    CABS=CABS[1::2]
-   if (len(Ts)==2*len(fac)):
-      Ts=Ts[1::2]
-   for i in range(len(fac)):
-       Tu.append(str(float(Ts[i])/float(fac[i])))
-   if return_list==True:
-      return [HF, CABS, MP2, MF12, CC, CCF12b, Ts, Tu, F12a, F12b]
+   if only_MP2 != True:
+      if (len(Ts)==2*len(fac)):
+         Ts=Ts[1::2]
+      for i in range(len(fac)):
+          Tu.append(str(float(Ts[i])/float(fac[i])))
+      if return_list==True:
+         return [HF, CABS, MP2, MF12, CC, CCF12b, Ts, Tu, F12a, F12b]
+      else:
+         return HF, CABS, MP2, MF12, CC, CCF12b, Ts, Tu, F12a, F12b
    else:
-      return HF, CABS, MP2, MF12, CC, CCF12b, Ts, Tu, F12a, F12b
+      if return_list==True:
+         return [HF, CABS, MP2, MF12]
+      else:
+         return HF, CABS, MP2, MF12
+
+###########################################
+#   read_RPA_CC_Molpro(filelist)   #
+###########################################
+#
+# function to grep the energies from the file (stored as a list or whatever)
+#
+###########################################
+#
+# filelist: a list with lines of the file
+# n: number of mers
+###########################################
+def read_RPA_CC_Molpro(filelist,return_list=False):
+   HF=[]
+   MP2=[] 
+   RPA=[]
+   count=-1
+   for line in filelist:
+      if "!RHF STATE  1.1 Ene" in line or "!RHF STATE 1.1 Ene" in line:
+         #print line,
+         tmp=line.split()
+         HF.append(tmp[4])
+
+      #get MP2 energies
+      if "E_c (MP2-RCCD)" in line:
+         tmp=line.split()
+         MP2.append(tmp[3])
+
+      #get RPA energies
+      if "E_c (dRPA-I-RCCD)" in line:
+         tmp=line.split()
+         RPA.append(tmp[3])
+
+   if return_list==True:
+      return [HF, MP2, RPA]
+   else:
+      return HF, MP2, RPA
+
+
+###########################################
+#   read_several_Molpro(filelist)   #
+###########################################
+#
+# function to grep energies of DFT calcs from file
+# the calculations are peformed with all the theoretical approximations 
+# for the largest cluster, then for smaller again one structure, several energies
+#
+# the returned structure will be a list with [[E1_AB,E1_A,E1_B],[E2_AB,E2_A,E2_B]]
+# where 1,2,... is index of method
+#
+###########################################
+#
+# filelist: a list with lines of the file
+# 
+###########################################
+def read_several_Molpro(filelist):
+   
+   #we'll loop over the output and search for lines with energy (in DFT/HF format)
+   #and make them to list, 
+   #if we find "Recomputing" then we'll start from zero and append the newly 
+   #found energies to the existing ones 
+   #this should lead to a list of lists
+
+   #TODO this routine expects that everything worked just fine
+   #print(len(filelist))
+  
+   #list for lists of energies
+   Es=[]
+   #let's keep track of how many structures we have in total
+   nstruc=0
+   idx=0
+   for line in filelist:
+      if line.find("Recomputing") != -1:
+         #print(line)
+         nstruc+=1
+         #print(nstruc)
+         idx=0
+      if nstruc==1:
+         if (line.find("STATE 1.1 Energy") !=-1) or (line.find("STATE  1.1 Energy")!=-1):
+            #print('found', nstruc, idx)
+            ees=[]
+            #print(line)
+            en=line.split()[4]
+            ees.append(en)
+            Es.append(ees)
+      else:
+         if (line.find("STATE 1.1 Energy") !=-1) or (line.find("STATE  1.1 Energy")!=-1):
+            #print('found', nstruc, idx)
+            en=line.split()[4]
+            Es[idx].append(en)
+            idx+=1
+   #print(Es)      
+   return Es
+
+
+###########################################
+#   read_LCCSDT_MRCC(filelist)   #
+###########################################
+#
+# function to grep the energies from MRCC output files
+# the files are cated together
+#
+###########################################
+#
+# filelist: a list with lines of the file
+# n: number of mers
+###########################################
+def read_LCCSDT_MRCC(filelist,return_list=False):
+   HF=[]
+   MP2c=[] 
+   CCc=[]
+   CCTc=[]
+   CCT=[]
+   count=-1
+   for line in filelist:
+      if "Reference energy [au]:" in line:
+         #print line,
+         tmp=line.split()
+         HF.append(tmp[3])
+
+      #get LMP2 energies
+      if "LMP2 correlation energy [au]:" in line:
+         tmp=line.split()
+         MP2c.append(tmp[4])
+
+      #get LNO-CCSD correlation energy
+      if "CCSD correlation energy + 0.5 MP2 corrections [au]" in line:
+         tmp=line.split()
+         CCc.append(tmp[8])
+
+      #get LNO-CCSD(T) correlation energy
+      if "CCSD(T) correlation energy + MP2 corrections [au]" in line:
+         tmp=line.split()
+         CCTc.append(tmp[7])
+
+      #get LNO-CCSD(T) energies
+      if "Total LNO-CCSD(T) energy" in line:
+         tmp=line.split()
+         CCT.append(tmp[7])
+
+   if return_list==True:
+      return [HF, MP2c, CCc, CCTc, CCT]
+   else:
+      return HF, MP2c, CCc, CCTc, CCT
+
+
+###########################################
+#   read_several_Psi4(filelist)   #
+###########################################
+#
+# function to grep energies of DFT calcs from file
+# the calculations are peformed with all the theoretical approximations 
+# for the largest cluster, then for smaller again one structure, several energies
+#
+# the returned structure will be a list with [[E1_AB,E1_A,E1_B],[E2_AB,E2_A,E2_B]]
+# where 1,2,... is index of method
+#
+###########################################
+#
+# filelist: a list with lines of the file
+# 
+###########################################
+def read_several_Psi4(filelist):
+   
+   #we'll loop over the output and search for lines with energy (in DFT/HF format)
+   #and make them to list, 
+   #if we find "Recomputing" then we'll start from zero and append the newly 
+   #found energies to the existing ones 
+   #this should lead to a list of lists
+
+   #TODO this routine expects that everything worked just fine
+   #print(len(filelist))
+  
+   #list for lists of energies
+   Es=[]
+   #let's keep track of how many structures we have in total
+   nstruc=0
+   idx=0
+   idx_max=0
+   #track the number of electrons to find out when we start a new structure
+   nel=0
+   for line in filelist:
+      #if we find that the structure changed, start
+      if line.find("Electrons    =") != -1:
+         nel_new=line.split()[2]
+         #we either started a new structure or started completely
+         if nel_new != nel:
+            #store the number of electron for this set of calculations
+            nel=nel_new
+            #store the number of energies for one structure
+            #when we go from dimer to monomer (or similar for larger clusters)
+            if nstruc==1:
+               idx_max=idx
+            #in either case we increase the index of mer
+            nstruc+=1
+            #print(nstruc)
+            #reset the monomer count
+            idx=0
+         #if we find a new structure (line with Electrons) 
+         #and the idx of calculation gets to the largest one
+         #we also set it to zero 
+         if idx==idx_max:
+            idx=0
+      #first structure
+      if nstruc==1:
+         if (line.find("Total Energy =") !=-1):
+            #print('found', nstruc, idx)
+            ees=[]
+            #print(line)
+            en=line.split()[3]
+            ees.append(en)
+            Es.append(ees)
+            idx+=1
+      #subsequent structures
+      else:
+         if (line.find("Total Energy =") !=-1):
+            #print('found', nstruc, idx)
+            en=line.split()[3]
+            #add the energy to the correct monomer
+            Es[idx].append(en)
+            idx+=1
+   #print(Es)      
+   return Es
 
 
 
@@ -2555,11 +2785,12 @@ def get_nbody_all(HF, CABS, MP2, MPF12, n):
 #
 # energies: list of lists with the energies of mers from a single run
 # n: number of mers 
-# 
+# incl_raw: do we want to return also the raw data?
+#
 #####
 # returns list of energies and true if correctly calculated
 ###########################################
-def get_nbody_all_new(energies, n):
+def get_nbody_all_new(energies, n, incl_raw=False):
 
    if n==5:
       #check that the length is 15 for 4 body interactions
@@ -3245,12 +3476,14 @@ def elem_order(molec):
 # a       input ASE Atoms structure 
 # ignore  a list of contacts to ignore, 
 #         could be useful for H transfer
+# bond_single if there is a lone atom, find a molecule for it
 #
 # TODO: check PBC
 # TODO: get atoms together for PBC (move atoms between unit cells)
 # TODO: implement ignore
+# TODO: define smallest cluster instead of bond_single
 #######################
-def monomerise(a,ignore=[]):
+def monomerise(a, ignore=[], bond_single=False):
     # to use Atoms
     import ase
     # covalent radii needed to check distance
@@ -3270,6 +3503,7 @@ def monomerise(a,ignore=[]):
     #create connectivity matrix that stores if atoms are 
     #connected or not
     connect=np.zeros((len(elem),len(elem)), dtype=bool)
+    connected=np.zeros(len(elem), dtype=int)
  
     #loop over pairs of atoms and set-up the connectivity matrix based on distance
     #and covalent radii
@@ -3283,6 +3517,29 @@ def monomerise(a,ignore=[]):
           if dist<1.1*(covalent_radii[elem[i]]+covalent_radii[elem[j]]):
              connect[i,j]=True
              connect[j,i]=True
+             connected[i]=1
+             connected[j]=1
+       #we did not find a neighbour for this atom
+       #check if bond_single is set and we must find a molecule for this atom
+       if connected[i]==0 and bond_single==True: 
+          print('will search for a neighbour for atom', i)
+          distmin=1000.
+          idxmin=-1
+          #find an index of atom with the shortest distance to the lone atom i
+          for j in range(len(elem)):
+             if i!=j: 
+                dist=a.get_distance(i,j,mic=True)
+                if dist<distmin:
+                   distmin=dist
+                   idxmin=j
+          if idxmin!=-1:
+             print('found a neighbour ', idxmin, ' with a distance ', distmin)
+             connect[i,idxmin]=True
+             connect[idxmin,i]=True
+             connected[i]=1
+             connected[idxmin]=1
+          else:
+             print('did not find a neighbour atom for atom ', i)
 
     print(connect)
 
